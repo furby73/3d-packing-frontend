@@ -1,5 +1,6 @@
-const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-const refreshToken = import.meta.env.VITE_FIREBASE_REFRESH_TOKEN;
+const runtime = window.APP_CONFIG ?? {};
+const apiKey = runtime.firebaseApiKey || import.meta.env.VITE_FIREBASE_API_KEY;
+const refreshToken = runtime.firebaseRefreshToken || import.meta.env.VITE_FIREBASE_REFRESH_TOKEN;
 const fixedIdToken = import.meta.env.VITE_FIREBASE_ID_TOKEN;
 const refreshMargin = 5 * 60 * 1000;
 

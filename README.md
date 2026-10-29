@@ -14,6 +14,10 @@ Without a refresh token, `VITE_FIREBASE_ID_TOKEN` is used as-is; it expires an h
 
 `.env.local` is gitignored but **is baked into the bundle**, including the Docker image: never push an image built with it.
 
+A served `/config.js` overrides it at runtime: `window.APP_CONFIG = {"firebaseApiKey": "...", "firebaseRefreshToken": "..."}`. The image ships an empty one; the GCP cluster mounts the real one from a Secret behind basic auth, so the published image carries no credential.
+
+Pushing a `v*` tag builds `ghcr.io/peczenko/3d-packing-frontend:<version>` (`.github/workflows/image.yml`); the deploy repo pins that version.
+
 Local Node is too old for Vite 8, so everything runs in Docker:
 
 ```bash
@@ -22,4 +26,4 @@ docker run --rm -it -p 3000:3000 -e API_PROXY=http://host.docker.internal:8080 -
 docker build -t packing-frontend:local .
 ```
 
-In the cluster the Gateway routes `/api/*` to the backend and `/` here, so the browser calls the API same-origin. Result downloads follow the API's redirect to Blob storage, which needs the `packingsa` CORS rule for `http://localhost:8080` and `http://localhost:3000`.
+In the cluster the Gateway routes `/api/*` to the backend and `/` here, so the browser calls the API same-origin. Result downloads follow the API's redirect to Blob storage, which needs a `packingsa` CORS rule for the page's origin (`http://localhost:8080`, `http://localhost:3000`, `https://3dpacking.dev`).
