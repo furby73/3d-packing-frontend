@@ -1,37 +1,34 @@
+import { initializeApp } from 'firebase/app';
+import {
+  createUserWithEmailAndPassword,
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut
+} from 'firebase/auth';
+
 const runtime = window.APP_CONFIG ?? {};
-const apiKey = runtime.firebaseApiKey || import.meta.env.VITE_FIREBASE_API_KEY;
-const refreshToken = runtime.firebaseRefreshToken || import.meta.env.VITE_FIREBASE_REFRESH_TOKEN;
-const fixedIdToken = import.meta.env.VITE_FIREBASE_ID_TOKEN;
-const refreshMargin = 5 * 60 * 1000;
+const config = {
+  apiKey: runtime.firebaseApiKey || import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: runtime.firebaseAuthDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: runtime.firebaseProjectId || import.meta.env.VITE_FIREBASE_PROJECT_ID
+};
 
-let cached = null;
-let pending = null;
+export const authConfigured = Boolean(config.apiKey);
 
-export const authConfigured = Boolean((apiKey && refreshToken) || fixedIdToken);
+const auth = authConfigured ? getAuth(initializeApp(config)) : null;
 
-async function exchange() {
-  const response = await fetch(`https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(apiKey)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken })
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(`Firebase token refresh failed: ${body.error?.message ?? response.status}`);
-  }
-  return { token: body.id_token, expiresAt: Date.now() + Number(body.expires_in) * 1000 };
-}
+export const onUserChanged = (callback) => onAuthStateChanged(auth, callback);
+export const signIn = (email, password) => signInWithEmailAndPassword(auth, email, password);
+export const signUp = (email, password) => createUserWithEmailAndPassword(auth, email, password);
+export const signOut = () => firebaseSignOut(auth);
 
 export function idToken({ force = false } = {}) {
-  if (!authConfigured) {
-    return Promise.reject(new Error('Set VITE_FIREBASE_API_KEY + VITE_FIREBASE_REFRESH_TOKEN, or VITE_FIREBASE_ID_TOKEN, in .env.local'));
-  }
-  if (!(apiKey && refreshToken)) return Promise.resolve(fixedIdToken);
-  if (!force && cached && cached.expiresAt - refreshMargin > Date.now()) {
-    return Promise.resolve(cached.token);
-  }
-  pending ??= exchange()
-    .then((fresh) => (cached = fresh).token)
-    .finally(() => (pending = null));
-  return pending;
+  const user = auth?.currentUser;
+  return user ? user.getIdToken(force) : Promise.reject(new Error('Not signed in'));
+}
+
+export function authMessage(error) {
+  const code = error?.code?.replace(/^auth\//, '');
+  return code ? code.replaceAll('-', ' ') : (error?.message ?? String(error));
 }
