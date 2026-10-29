@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api } from './lib/api.js';
-  import { authConfigured } from './lib/auth.js';
+  import { authConfigured, authMessage, onUserChanged, signIn, signOut, signUp } from './lib/auth.js';
   import Viewer from './lib/Viewer.svelte';
 
   const projectName = 'Packing test bench';
@@ -9,7 +9,11 @@
 
   let phase = $state('loading');
   let fatal = $state('');
-  let me = $state(null);
+  let user = $state(null);
+  let email = $state('');
+  let password = $state('');
+  let authBusy = $state(false);
+  let authError = $state('');
   let project = $state(null);
   let limits = $state(null);
   let files = $state([]);
@@ -33,20 +37,27 @@
 
   onMount(() => {
     const ticker = setInterval(() => (now = Date.now()), 1000);
-    start();
+    let unsubscribe;
+    if (authConfigured) {
+      unsubscribe = onUserChanged((next) => {
+        user = next;
+        if (next) start();
+        else reset();
+      });
+    } else {
+      fail('Firebase is not configured: set VITE_FIREBASE_API_KEY in .env.local, or serve it from /config.js.');
+    }
     return () => {
       clearInterval(ticker);
       clearTimeout(pollTimer);
+      unsubscribe?.();
     };
   });
 
   async function start() {
-    if (!authConfigured) {
-      fail('Set VITE_FIREBASE_API_KEY + VITE_FIREBASE_REFRESH_TOKEN, or VITE_FIREBASE_ID_TOKEN, in .env.local, then rebuild.');
-      return;
-    }
+    phase = 'loading';
     try {
-      me = await api.me();
+      await api.me();
       const [schema, found] = await Promise.all([api.inputSchema(), api.activeProjects(projectName)]);
       limits = limitsFrom(schema);
       runtime = limits.defaultRuntime;
@@ -63,6 +74,37 @@
   function fail(message) {
     fatal = message;
     phase = 'error';
+  }
+
+  function reset() {
+    clearTimeout(pollTimer);
+    if (preview.url) URL.revokeObjectURL(preview.url);
+    project = null;
+    files = [];
+    picks = {};
+    jobs = [];
+    jobsError = '';
+    watched = null;
+    preview = { job: null, text: null, url: null, loading: false, error: '' };
+    password = '';
+    phase = 'signed-out';
+  }
+
+  async function authenticate(action) {
+    authBusy = true;
+    authError = '';
+    try {
+      await action(email.trim(), password);
+    } catch (error) {
+      authError = authMessage(error);
+    } finally {
+      authBusy = false;
+    }
+  }
+
+  function submitLogin(event) {
+    event.preventDefault();
+    authenticate(signIn);
   }
 
   function limitsFrom(schema) {
@@ -209,11 +251,26 @@
   <aside>
     <header>
       <h1>Packing test bench</h1>
-      {#if me}<small>{me.email ?? me.username ?? me.id}</small>{/if}
+      {#if user}
+        <div class="row">
+          <small>{user.email}</small>
+          <button class="link" onclick={signOut}>Sign out</button>
+        </div>
+      {/if}
     </header>
 
     {#if phase === 'loading'}
       <p class="muted">Connecting…</p>
+    {:else if phase === 'signed-out'}
+      <form class="login" onsubmit={submitLogin}>
+        <input type="email" placeholder="Email" autocomplete="username" required bind:value={email} />
+        <input type="password" placeholder="Password" autocomplete="current-password" required bind:value={password} />
+        <div class="row">
+          <button type="submit" disabled={authBusy}>Sign in</button>
+          <button type="button" class="link" disabled={authBusy} onclick={() => authenticate(signUp)}>Create account</button>
+        </div>
+        {#if authError}<p class="error">{authError}</p>{/if}
+      </form>
     {:else if phase === 'error'}
       <p class="error">{fatal}</p>
     {:else}
@@ -421,6 +478,20 @@
     padding: 0;
     background: none;
     color: #60a5fa;
+  }
+  .login {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  input[type='email'],
+  input[type='password'] {
+    padding: 0.45rem;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    background: #0f172a;
+    color: inherit;
+    font: inherit;
   }
   input[type='number'] {
     width: 5rem;

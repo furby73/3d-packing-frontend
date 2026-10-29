@@ -2,19 +2,16 @@
 
 Packing test bench: pick `.obj` models, set copies and a time limit, submit a packing job, watch it run and preview the packed result with three.js. Everything happens in one project, `Packing test bench`, created on first load.
 
-There is no login. The app signs in with a hardcoded Firebase refresh token and exchanges it for ID tokens itself:
+Sign in with a Firebase email/password account, or create one from the form; the backend provisions its profile on the first `/api/v1/users/me`. The Firebase web config is public by design:
 
 ```bash
 cp .env.example .env.local
-# VITE_FIREBASE_API_KEY       Firebase Console -> Project settings -> General -> Web API Key
-# VITE_FIREBASE_REFRESH_TOKEN backend's scripts/Get-FirebaseToken.ps1 -SetEnv, then $env:REFRESH_TOKEN
+# VITE_FIREBASE_API_KEY      Firebase Console -> Project settings -> General -> Web API Key
+# VITE_FIREBASE_AUTH_DOMAIN  packing-3d-6a9e6.firebaseapp.com
+# VITE_FIREBASE_PROJECT_ID   packing-3d-6a9e6
 ```
 
-Without a refresh token, `VITE_FIREBASE_ID_TOKEN` is used as-is; it expires an hour after it was minted.
-
-`.env.local` is gitignored but **is baked into the bundle**, including the Docker image: never push an image built with it.
-
-A served `/config.js` overrides it at runtime: `window.APP_CONFIG = {"firebaseApiKey": "...", "firebaseRefreshToken": "..."}`. The image ships an empty one; the GCP cluster mounts the real one from a Secret behind basic auth, so the published image carries no credential.
+A served `/config.js` overrides `.env.local` at runtime: `window.APP_CONFIG = {"firebaseApiKey": "...", "firebaseAuthDomain": "...", "firebaseProjectId": "..."}`. The image ships an empty one and the GCP cluster mounts the real one, so one image runs anywhere.
 
 Pushing a `v*` tag builds `ghcr.io/peczenko/3d-packing-frontend:<version>` (`.github/workflows/image.yml`); the deploy repo pins that version.
 
