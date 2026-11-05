@@ -13,7 +13,7 @@ cp .env.example .env.local
 
 A served `/config.js` overrides `.env.local` at runtime: `window.APP_CONFIG = {"firebaseApiKey": "...", "firebaseAuthDomain": "...", "firebaseProjectId": "..."}`. The image ships an empty one and the GCP cluster mounts the real one, so one image runs anywhere.
 
-Pushing a `v*` tag builds `ghcr.io/peczenko/3d-packing-frontend:<version>` (`.github/workflows/image.yml`); the deploy repo pins that version.
+Pushing to `demo` builds `ghcr.io/furby73/3d-packing-frontend:demo-<short sha>` (`.github/workflows/image.yml`); the deploy repo pins that tag.
 
 Local Node is too old for Vite 8, so everything runs in Docker:
 
