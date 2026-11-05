@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api } from './lib/api.js';
-  import { authConfigured, authMessage, onUserChanged, signIn, signOut, signUp } from './lib/auth.js';
+  import { authConfigured, authMessage, onUserChanged, signIn, signInWithGoogle, signOut, signUp } from './lib/auth.js';
   import Viewer from './lib/Viewer.svelte';
 
   const projectName = 'Packing test bench';
@@ -269,6 +269,7 @@
           <button type="submit" disabled={authBusy}>Sign in</button>
           <button type="button" class="link" disabled={authBusy} onclick={() => authenticate(signUp)}>Create account</button>
         </div>
+        <button type="button" class="google" disabled={authBusy} onclick={() => authenticate(signInWithGoogle)}>Continue with Google</button>
         {#if authError}<p class="error">{authError}</p>{/if}
       </form>
     {:else if phase === 'error'}
@@ -483,6 +484,10 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+  }
+  button.google {
+    background: #f8fafc;
+    color: #0f172a;
   }
   input[type='email'],
   input[type='password'] {

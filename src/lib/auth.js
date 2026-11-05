@@ -2,8 +2,10 @@ import { initializeApp } from 'firebase/app';
 import {
   createUserWithEmailAndPassword,
   getAuth,
+  GoogleAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut as firebaseSignOut
 } from 'firebase/auth';
 
@@ -21,6 +23,10 @@ const auth = authConfigured ? getAuth(initializeApp(config)) : null;
 export const onUserChanged = (callback) => onAuthStateChanged(auth, callback);
 export const signIn = (email, password) => signInWithEmailAndPassword(auth, email, password);
 export const signUp = (email, password) => createUserWithEmailAndPassword(auth, email, password);
+
+const google = new GoogleAuthProvider();
+google.setCustomParameters({ prompt: 'select_account' });
+export const signInWithGoogle = () => signInWithPopup(auth, google);
 export const signOut = () => firebaseSignOut(auth);
 
 export function idToken({ force = false } = {}) {
