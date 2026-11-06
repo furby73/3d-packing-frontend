@@ -58,5 +58,7 @@ export const api = {
   createJob: (projectId, input) => json(`/projects/${projectId}/packing-jobs`, send('POST', input)),
   cancelJob: (projectId, jobId) => json(`/projects/${projectId}/packing-jobs/${jobId}/cancel`, { method: 'POST' }),
   result: async (projectId, jobId) =>
-    (await request(`/projects/${projectId}/packing-jobs/${jobId}/result`)).blob()
+    (await request(`/projects/${projectId}/packing-jobs/${jobId}/result`)).blob(),
+  preview: async (projectId, jobId, quality) =>
+    (await request(`/projects/${projectId}/packing-jobs/${jobId}/preview/${quality}`)).arrayBuffer()
 };

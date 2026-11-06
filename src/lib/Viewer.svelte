@@ -1,9 +1,13 @@
 <script>
   import * as THREE from 'three';
   import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
   import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-  let { text = null } = $props();
+  let { text = null, glb = null, subject = null, onerror = () => {} } = $props();
+
+  const gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
   let canvas;
   let stats = $state(null);
@@ -12,6 +16,8 @@
   let controls;
   let model = null;
   let bounds = null;
+  let generation = 0;
+  let framedSubject;
 
   $effect(() => {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -52,7 +58,7 @@
   });
 
   $effect(() => {
-    show(text);
+    show(text, glb, subject);
   });
 
   function clear() {
@@ -60,6 +66,7 @@
       if (child.isMesh) {
         child.geometry.dispose();
         child.material.dispose();
+        if (child.isInstancedMesh) child.dispose();
       }
     });
     bounds?.dispose();
@@ -69,20 +76,37 @@
     bounds = null;
   }
 
-  function show(objText) {
-    clear();
-    stats = null;
-    if (!objText) return;
+  const color = (index) => new THREE.Color().setHSL((index * 0.618034) % 1, 0.6, 0.55);
 
-    model = new OBJLoader().parse(objText);
+  async function show(objText, glbBuffer, key) {
+    const current = ++generation;
+    if (!objText && !glbBuffer) {
+      clear();
+      stats = null;
+      framedSubject = undefined;
+      return;
+    }
+    let next;
+    try {
+      next = glbBuffer ? (await gltfLoader.parseAsync(glbBuffer, '')).scene : new OBJLoader().parse(objText);
+    } catch (error) {
+      if (current === generation) onerror(error);
+      return;
+    }
+    if (current !== generation) return;
+    const keepCamera = !!model && key != null && key === framedSubject;
+    clear();
+    model = next;
     let objects = 0;
     model.traverse((child) => {
       if (!child.isMesh) return;
-      const hue = (objects++ * 0.618034) % 1;
-      child.material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color().setHSL(hue, 0.6, 0.55),
-        flatShading: true
-      });
+      child.material = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true });
+      if (child.isInstancedMesh) {
+        for (let i = 0; i < child.count; i++) child.setColorAt(i, color(objects++));
+        child.instanceColor.needsUpdate = true;
+      } else {
+        child.material.color = color(objects++);
+      }
     });
     scene.add(model);
 
@@ -91,13 +115,16 @@
     scene.add(bounds);
 
     const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const radius = size.length() / 2 || 1;
-    camera.near = radius / 100;
-    camera.far = radius * 100;
-    camera.position.copy(center).add(new THREE.Vector3(1, 0.75, 1.25).normalize().multiplyScalar(radius * 2.6));
-    camera.updateProjectionMatrix();
-    controls.target.copy(center);
+    if (!keepCamera) {
+      const center = box.getCenter(new THREE.Vector3());
+      const radius = size.length() / 2 || 1;
+      camera.near = radius / 100;
+      camera.far = radius * 100;
+      camera.position.copy(center).add(new THREE.Vector3(1, 0.75, 1.25).normalize().multiplyScalar(radius * 2.6));
+      camera.updateProjectionMatrix();
+      controls.target.copy(center);
+      framedSubject = key;
+    }
     stats = { objects, size, volume: size.x * size.y * size.z };
   }
 

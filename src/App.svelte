@@ -6,6 +6,8 @@
 
   const projectName = 'Packing test bench';
   const active = ['QUEUED', 'RUNNING'];
+  const triangleBudget = 3_000_000;
+  const closed = { job: null, text: null, glb: null, quality: null, loading: false, error: '' };
 
   let phase = $state('loading');
   let fatal = $state('');
@@ -27,7 +29,8 @@
   let jobsError = $state('');
   let cancelling = $state({});
   let watched = $state(null);
-  let preview = $state({ job: null, text: null, url: null, loading: false, error: '' });
+  let preview = $state(closed);
+  let downloading = $state('');
   let now = $state(Date.now());
   let pollTimer;
 
@@ -78,14 +81,13 @@
 
   function reset() {
     clearTimeout(pollTimer);
-    if (preview.url) URL.revokeObjectURL(preview.url);
     project = null;
     files = [];
     picks = {};
     jobs = [];
     jobsError = '';
     watched = null;
-    preview = { job: null, text: null, url: null, loading: false, error: '' };
+    preview = closed;
     password = '';
     phase = 'signed-out';
   }
@@ -207,24 +209,79 @@
         watched = null;
         if (finished.status === 'SUCCEEDED') open(finished);
       }
+      const opened = jobs.find((job) => job.id === preview.job?.id);
+      if (opened && waitingForPreview(preview.job) && opened.preview?.status !== 'PENDING' && !preview.text && !preview.loading) {
+        open(opened);
+      }
     } catch (error) {
       jobsError = error.message;
     }
-    if (jobsError || jobs.some((job) => active.includes(job.status))) {
+    if (jobsError || jobs.some((job) => active.includes(job.status) || waitingForPreview(job))) {
       pollTimer = setTimeout(refreshJobs, jobsError ? 5000 : 2000);
     }
   }
 
+  const waitingForPreview = (job) => job?.status === 'SUCCEEDED' && job.preview?.status === 'PENDING';
+
+  const previewModels = (job) => (job?.preview?.status === 'READY' ? job.preview.models : []);
+
+  function defaultQuality(models) {
+    const fitting = models.filter((model) => model.triangles <= triangleBudget);
+    return (fitting.at(-1) ?? models[0]).quality;
+  }
+
   async function open(job) {
-    if (preview.url) URL.revokeObjectURL(preview.url);
-    preview = { job, text: null, url: null, loading: true, error: '' };
+    const models = previewModels(job);
+    if (models.length > 0) {
+      const target = defaultQuality(models);
+      if (models[0].quality !== target) await showPreview(job, models[0].quality);
+      if (preview.job?.id === job.id && !preview.error) await showPreview(job, target);
+    } else if (waitingForPreview(job)) {
+      preview = { ...closed, job };
+    } else {
+      await showFull(job);
+    }
+  }
+
+  async function showPreview(job, quality) {
+    const glb = preview.job?.id === job.id ? preview.glb : null;
+    preview = { ...closed, job, glb, quality, loading: true };
     try {
-      const blob = await api.result(project.id, job.id);
-      const text = await blob.text();
-      if (preview.job?.id !== job.id) return;
-      preview = { job, text, url: URL.createObjectURL(blob), loading: false, error: '' };
+      const loaded = await api.preview(project.id, job.id, quality);
+      if (preview.job?.id !== job.id || preview.quality !== quality) return;
+      preview = { ...closed, job, glb: loaded, quality };
     } catch (error) {
       if (preview.job?.id === job.id) preview = { ...preview, loading: false, error: error.message };
+    }
+  }
+
+  async function showFull(job) {
+    preview = { ...closed, job, loading: true };
+    try {
+      const text = await (await api.result(project.id, job.id)).text();
+      if (preview.job?.id !== job.id || preview.quality) return;
+      preview = { ...closed, job, text };
+    } catch (error) {
+      if (preview.job?.id === job.id) preview = { ...preview, loading: false, error: error.message };
+    }
+  }
+
+  async function download(job, quality) {
+    downloading = quality ?? 'OBJ';
+    try {
+      const blob = quality
+        ? new Blob([await api.preview(project.id, job.id, quality)], { type: 'model/gltf-binary' })
+        : await api.result(project.id, job.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = quality ? `packing-job-${job.id}-${quality.toLowerCase()}.glb` : (job.resultFileName ?? 'packed.obj');
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      preview = { ...preview, error: error.message };
+    } finally {
+      downloading = '';
     }
   }
 
@@ -241,6 +298,8 @@
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
+
+  const triangles = (count) => (count >= 1_000_000 ? `${(count / 1_000_000).toFixed(1)}M` : `${Math.round(count / 1000)}k`);
 
   const clock = (instant) => new Date(instant).toLocaleTimeString();
 
@@ -372,16 +431,48 @@
   </aside>
 
   <div class="stage">
-    <Viewer text={preview.text} />
+    <Viewer
+      text={preview.text}
+      glb={preview.glb}
+      subject={preview.job?.id}
+      onerror={(error) => (preview = { ...preview, loading: false, error: error.message })}
+    />
     <div class="overlay">
-      {#if preview.loading}
-        <span>Loading result…</span>
-      {:else if preview.error}
-        <span class="error">{preview.error}</span>
-      {:else if preview.url}
-        <a class="button" href={preview.url} download={preview.job.resultFileName ?? 'packed.obj'}>
-          Download {preview.job.resultFileName ?? 'packed.obj'}
-        </a>
+      {#if preview.job}
+        {@const models = previewModels(preview.job)}
+        {#if models.length > 0}
+          <div class="qualities">
+            {#each models as model (model.quality)}
+              <button
+                class:current={preview.quality === model.quality}
+                disabled={preview.loading}
+                title="{triangles(model.triangles)} triangles · {size(model.sizeBytes)}"
+                onclick={() => showPreview(preview.job, model.quality)}
+              >
+                {model.quality.toLowerCase()} · {triangles(model.triangles)}
+              </button>
+            {/each}
+          </div>
+        {:else if waitingForPreview(preview.job) && !preview.text && !preview.loading}
+          <span class="muted">Preparing a lighter preview…</span>
+          <button class="link" onclick={() => showFull(preview.job)}>
+            Load the full result ({size(preview.job.resultSizeBytes)}) instead
+          </button>
+        {/if}
+        {#if preview.loading}
+          <span>Loading {preview.quality ? `${preview.quality.toLowerCase()} preview` : 'full result'}…</span>
+        {/if}
+        {#if preview.error}<span class="error">{preview.error}</span>{/if}
+        <div class="downloads">
+          <button disabled={!!downloading} onclick={() => download(preview.job, null)}>
+            {downloading === 'OBJ' ? 'Downloading…' : `Download OBJ (${size(preview.job.resultSizeBytes)})`}
+          </button>
+          {#if preview.quality}
+            <button disabled={!!downloading} onclick={() => download(preview.job, preview.quality)}>
+              {downloading === preview.quality ? 'Downloading…' : `Download ${preview.quality.toLowerCase()} GLB`}
+            </button>
+          {/if}
+        </div>
       {:else}
         <span class="muted">Pick a finished job to preview its result.</span>
       {/if}
@@ -592,8 +683,20 @@
     position: absolute;
     top: 1rem;
     right: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.4rem;
     padding: 0.4rem 0.7rem;
     border-radius: 6px;
     background: rgb(15 23 42 / 0.8);
+  }
+  .qualities,
+  .downloads {
+    display: flex;
+    gap: 0.3rem;
+  }
+  .qualities button.current {
+    outline: 2px solid #94a3b8;
   }
 </style>
