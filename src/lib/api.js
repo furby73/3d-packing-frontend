@@ -54,6 +54,9 @@ export const api = {
     form.append('file', file);
     return json(`/projects/${projectId}/files`, { method: 'POST', body: form });
   },
+  samples: () => json('/sample-models'),
+  sampleText: async (sampleId) => (await request(`/sample-models/${encodeURIComponent(sampleId)}/content`)).text(),
+  addSample: (projectId, sampleId) => json(`/projects/${projectId}/files/samples`, send('POST', { sampleId })),
   jobs: (projectId) => json(`/projects/${projectId}/packing-jobs?size=10`),
   createJob: (projectId, input) => json(`/projects/${projectId}/packing-jobs`, send('POST', input)),
   cancelJob: (projectId, jobId) => json(`/projects/${projectId}/packing-jobs/${jobId}/cancel`, { method: 'POST' }),
