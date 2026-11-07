@@ -7,7 +7,7 @@
   const projectName = 'Packing test bench';
   const active = ['QUEUED', 'RUNNING'];
   const triangleBudget = 3_000_000;
-  const closed = { job: null, text: null, glb: null, quality: null, loading: false, error: '' };
+  const closed = { job: null, sample: null, text: null, glb: null, quality: null, loading: false, error: '' };
 
   let phase = $state('loading');
   let fatal = $state('');
@@ -23,6 +23,9 @@
   let runtime = $state(60);
   let uploading = $state('');
   let uploadError = $state('');
+  let samples = $state([]);
+  let showSamples = $state(false);
+  let addingSample = $state('');
   let submitting = $state(false);
   let submitError = $state('');
   let jobs = $state([]);
@@ -61,8 +64,13 @@
     phase = 'loading';
     try {
       await api.me();
-      const [schema, found] = await Promise.all([api.inputSchema(), api.activeProjects(projectName)]);
+      const [schema, found, catalogue] = await Promise.all([
+        api.inputSchema(),
+        api.activeProjects(projectName),
+        api.samples().catch(() => [])
+      ]);
       limits = limitsFrom(schema);
+      samples = catalogue;
       runtime = limits.defaultRuntime;
       project =
         found.content.find((p) => p.name === projectName && p.myPermission !== 'READ') ??
@@ -84,6 +92,7 @@
     project = null;
     files = [];
     picks = {};
+    showSamples = false;
     jobs = [];
     jobsError = '';
     watched = null;
@@ -161,6 +170,31 @@
     }
     uploading = '';
     await loadFiles().catch((error) => (uploadError = error.message));
+  }
+
+  async function addSample(sample) {
+    addingSample = sample.id;
+    uploadError = '';
+    try {
+      const stored = await api.addSample(project.id, sample.id);
+      picks[stored.id] = 1;
+    } catch (error) {
+      uploadError = `${sample.name}: ${error.message}`;
+    } finally {
+      addingSample = '';
+    }
+    await loadFiles().catch((error) => (uploadError = error.message));
+  }
+
+  async function previewSample(sample) {
+    preview = { ...closed, sample, loading: true };
+    try {
+      const text = await api.sampleText(sample.id);
+      if (preview.sample?.id !== sample.id) return;
+      preview = { ...closed, sample, text };
+    } catch (error) {
+      if (preview.sample?.id === sample.id) preview = { ...preview, loading: false, error: error.message };
+    }
   }
 
   function toggle(file) {
@@ -337,15 +371,43 @@
       <section>
         <div class="row">
           <h2>Models</h2>
-          <label class="button" class:disabled={uploading}>
-            Add .obj files
-            <input type="file" accept=".obj" multiple hidden disabled={!!uploading} onchange={addFiles} />
-          </label>
+          <span class="row">
+            {#if samples.length > 0 && files.length > 0}
+              <button class="link" onclick={() => (showSamples = !showSamples)}>
+                {showSamples ? 'Hide samples' : 'Samples'}
+              </button>
+            {/if}
+            <label class="button" class:disabled={uploading}>
+              Add .obj files
+              <input type="file" accept=".obj" multiple hidden disabled={!!uploading} onchange={addFiles} />
+            </label>
+          </span>
         </div>
         {#if uploading}<p class="muted">{uploading}</p>{/if}
         {#if uploadError}<p class="error">{uploadError}</p>{/if}
+        {#if samples.length > 0 && (showSamples || files.length === 0)}
+          {#if files.length === 0}
+            <p class="muted">No models in the project yet. Start with a sample:</p>
+          {/if}
+          <ul class="samples">
+            {#each samples as sample (sample.id)}
+              <li class:current={preview.sample?.id === sample.id}>
+                <button class="sample" onclick={() => previewSample(sample)} title="Preview {sample.name}">
+                  <span class="row">
+                    <span>{sample.name}</span>
+                    <span class="muted">{size(sample.sizeBytes)}</span>
+                  </span>
+                  <span class="muted">{sample.description}</span>
+                </button>
+                <button class="add" disabled={!!addingSample} onclick={() => addSample(sample)}>
+                  {addingSample === sample.id ? 'Adding…' : 'Add'}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
         {#if files.length === 0}
-          <p class="muted">No models in the project yet.</p>
+          {#if samples.length === 0}<p class="muted">No models in the project yet.</p>{/if}
         {:else}
           <ul class="files">
             {#each files as file (file.id)}
@@ -434,7 +496,7 @@
     <Viewer
       text={preview.text}
       glb={preview.glb}
-      subject={preview.job?.id}
+      subject={preview.job?.id ?? preview.sample?.id}
       onerror={(error) => (preview = { ...preview, loading: false, error: error.message })}
     />
     <div class="overlay">
@@ -473,6 +535,13 @@
             </button>
           {/if}
         </div>
+      {:else if preview.sample}
+        <span>Sample: {preview.sample.name}</span>
+        {#if preview.loading}<span>Loading sample…</span>{/if}
+        {#if preview.error}<span class="error">{preview.error}</span>{/if}
+        <button disabled={!!addingSample} onclick={() => addSample(preview.sample)}>
+          {addingSample === preview.sample.id ? 'Adding…' : 'Add to project'}
+        </button>
       {:else}
         <span class="muted">Pick a finished job to preview its result.</span>
       {/if}
@@ -623,6 +692,29 @@
   }
   .copies {
     width: 4rem;
+  }
+  .samples li {
+    display: flex;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+  .sample {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    flex: 1;
+    min-width: 0;
+    padding: 0.45rem 0.5rem;
+    border: 1px solid #1e293b;
+    background: #0f172a;
+    color: inherit;
+    text-align: left;
+  }
+  .samples li.current .sample {
+    border-color: #3b82f6;
+  }
+  .add {
+    padding: 0.3rem 0.7rem;
   }
   .jobs li {
     display: flex;
