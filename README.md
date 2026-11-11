@@ -1,6 +1,6 @@
 # 3d-packing-frontend
 
-Packing test bench: pick `.obj` models, set copies and a time limit, submit a packing job, watch it run and preview the packed result with three.js. Everything happens in one project, `Packing test bench`, created on first load.
+Packing test bench: pick `.obj` models, set copies, a time limit and the container size (plus gap, algorithm and seed), submit a packing job, watch it run and preview the packed result with three.js. The engine fills as few containers as it can; when it needs more than one, the preview shows them side by side and each container's OBJ can be downloaded on its own. The defaults come from the backend's input schema. Everything happens in one project, `Packing test bench`, created on first load.
 
 Sign in with a Firebase email/password account, or create one from the form; the backend provisions its profile on the first `/api/v1/users/me`. The Firebase web config is public by design:
 
