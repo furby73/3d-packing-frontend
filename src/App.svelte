@@ -21,6 +21,8 @@
   let files = $state([]);
   let picks = $state({});
   let runtime = $state(60);
+  let engine = $state(null);
+  let algorithms = $state([]);
   let uploading = $state('');
   let uploadError = $state('');
   let samples = $state([]);
@@ -34,12 +36,13 @@
   let watched = $state(null);
   let preview = $state(closed);
   let downloading = $state('');
+  let bin = $state(1);
   let now = $state(Date.now());
   let pollTimer;
 
   const selected = $derived(files.filter((file) => file.id in picks));
   const totalCopies = $derived(selected.reduce((sum, file) => sum + (Number(picks[file.id]) || 0), 0));
-  const problems = $derived(validate(selected, totalCopies, runtime, limits));
+  const problems = $derived(validate(selected, totalCopies, runtime, limits, engine));
 
   onMount(() => {
     const ticker = setInterval(() => (now = Date.now()), 1000);
@@ -72,6 +75,8 @@
       limits = limitsFrom(schema);
       samples = catalogue;
       runtime = limits.defaultRuntime;
+      engine = engineDefaults(schema);
+      algorithms = schema.properties.parameters?.properties?.algorithm?.enum ?? [];
       project =
         found.content.find((p) => p.name === projectName && p.myPermission !== 'READ') ??
         (await api.createProject(projectName));
@@ -129,11 +134,25 @@
       maxCopies: copies.maximum,
       minRuntime: time.minimum,
       maxRuntime: time.maximum,
-      defaultRuntime: time.default
+      defaultRuntime: time.default,
+      maxSeed: schema.properties.parameters?.properties?.seed?.maximum
     };
   }
 
-  function validate(chosen, total, seconds, limit) {
+  function engineDefaults(schema) {
+    const options = schema.properties.parameters?.properties ?? {};
+    const container = options.container?.properties ?? {};
+    return {
+      width: container.width?.default,
+      length: container.length?.default,
+      height: container.height?.default,
+      gap: options.gap?.default ?? 0,
+      algorithm: options.algorithm?.default,
+      seed: options.seed?.default
+    };
+  }
+
+  function validate(chosen, total, seconds, limit, options) {
     if (!limit) return [];
     const out = [];
     if (chosen.length === 0) out.push('Pick at least one model');
@@ -146,6 +165,15 @@
     if (total > limit.maxTotalCopies) out.push(`At most ${limit.maxTotalCopies} objects in total`);
     if (!Number.isInteger(seconds) || seconds < limit.minRuntime || seconds > limit.maxRuntime) {
       out.push(`Time limit must be ${limit.minRuntime}–${limit.maxRuntime} s`);
+    }
+    if (options) {
+      if (![options.width, options.length, options.height].every((side) => Number.isFinite(side) && side > 0)) {
+        out.push('Every container side must be a positive number');
+      }
+      if (!Number.isFinite(options.gap) || options.gap < 0) out.push('Gap must be zero or more');
+      if (!Number.isInteger(options.seed) || options.seed < 0 || (limit.maxSeed != null && options.seed > limit.maxSeed)) {
+        out.push(`Seed must be a whole number from 0 to ${limit.maxSeed}`);
+      }
     }
     return out;
   }
@@ -208,7 +236,12 @@
     try {
       const job = await api.createJob(project.id, {
         maxRuntimeSeconds: runtime,
-        parameters: {},
+        parameters: {
+          container: { width: engine.width, length: engine.length, height: engine.height },
+          gap: engine.gap,
+          algorithm: engine.algorithm,
+          seed: engine.seed
+        },
         items: selected.map((file) => ({ fileId: file.id, copies: Number(picks[file.id]) }))
       });
       watched = job.id;
@@ -265,6 +298,7 @@
   }
 
   async function open(job) {
+    bin = 1;
     const models = previewModels(job);
     if (models.length > 0) {
       const target = defaultQuality(models);
@@ -306,17 +340,32 @@
       const blob = quality
         ? new Blob([await api.preview(project.id, job.id, quality)], { type: 'model/gltf-binary' })
         : await api.result(project.id, job.id);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = quality ? `packing-job-${job.id}-${quality.toLowerCase()}.glb` : (job.resultFileName ?? 'packed.obj');
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      save(blob, quality ? `packing-job-${job.id}-${quality.toLowerCase()}.glb` : (job.resultFileName ?? 'packed.obj'));
     } catch (error) {
       preview = { ...preview, error: error.message };
     } finally {
       downloading = '';
     }
+  }
+
+  async function downloadBin(job, number) {
+    downloading = `bin-${number}`;
+    try {
+      save(await api.resultBin(project.id, job.id, number), `packing-job-${job.id}-bin-${String(number).padStart(3, '0')}.obj`);
+    } catch (error) {
+      preview = { ...preview, error: error.message };
+    } finally {
+      downloading = '';
+    }
+  }
+
+  function save(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   const elapsed = (from, to) => (from ? ((to ? Date.parse(to) : now) - Date.parse(from)) / 1000 : null);
@@ -338,6 +387,13 @@
   const clock = (instant) => new Date(instant).toLocaleTimeString();
 
   const itemsOf = (job) => job.input?.items.map((item) => `${item.fileName ?? 'file'} ×${item.copies}`).join(', ') ?? '';
+
+  function containerOf(job) {
+    const side = job.input?.parameters?.container;
+    return side ? `${side.width} × ${side.length} × ${side.height}` : '';
+  }
+
+  const boxes = (count) => `${count} ${count === 1 ? 'container' : 'containers'}`;
 </script>
 
 <main>
@@ -441,6 +497,34 @@
             <input class="runtime" type="number" min={limits.minRuntime} max={limits.maxRuntime} bind:value={runtime} /> s
           </span>
         </label>
+        <div class="row">
+          <span>Container</span>
+          <span class="sides">
+            <input type="number" min="0" step="any" title="Width (X)" bind:value={engine.width} />
+            ×
+            <input type="number" min="0" step="any" title="Length (Y)" bind:value={engine.length} />
+            ×
+            <input type="number" min="0" step="any" title="Height (Z)" bind:value={engine.height} />
+          </span>
+        </div>
+        <label class="row">
+          <span>Gap</span>
+          <input type="number" min="0" step="any" bind:value={engine.gap} />
+        </label>
+        <label class="row">
+          <span>Algorithm</span>
+          <select bind:value={engine.algorithm}>
+            {#each algorithms as algorithm}<option value={algorithm}>{algorithm}</option>{/each}
+          </select>
+        </label>
+        <label class="row">
+          <span>Seed</span>
+          <input type="number" min="0" max={limits.maxSeed} step="1" bind:value={engine.seed} />
+        </label>
+        <p class="muted">
+          Container size and gap use the models' own units. The engine fills as few containers as it can; the samples are
+          about 0.1–2 units across.
+        </p>
         <p class="muted">
           {selected.length} models · {totalCopies}/{limits.maxTotalCopies} objects. Large inputs overrun the limit while
           the engine loads them.
@@ -472,6 +556,12 @@
                   <span class="muted">{clock(job.createdAt)}</span>
                 </span>
                 <span class="items">{itemsOf(job)}</span>
+                {#if containerOf(job)}
+                  <span class="muted">
+                    container {containerOf(job)}
+                    {#if job.resultBins?.length}· {boxes(job.resultBins.length)}{/if}
+                  </span>
+                {/if}
                 <span class="muted">
                   queue {duration(elapsed(job.createdAt, job.startedAt ?? job.finishedAt))} · run {duration(run)} / {limit} s
                   {#if run != null && limit && run > limit}<strong>(+{(run - limit).toFixed(1)} s)</strong>{/if}
@@ -535,6 +625,20 @@
             </button>
           {/if}
         </div>
+        {#if preview.job.resultBins?.length > 1}
+          {@const bins = preview.job.resultBins}
+          <div class="downloads">
+            <span class="muted">{boxes(bins.length)}, shown side by side</span>
+            <select bind:value={bin}>
+              {#each bins as entry (entry.number)}
+                <option value={entry.number}>Container {entry.number} · {size(entry.sizeBytes)}</option>
+              {/each}
+            </select>
+            <button disabled={!!downloading} onclick={() => downloadBin(preview.job, bin)}>
+              {downloading === `bin-${bin}` ? 'Downloading…' : 'Download OBJ'}
+            </button>
+          </div>
+        {/if}
       {:else if preview.sample}
         <span>Sample: {preview.sample.name}</span>
         {#if preview.loading}<span>Loading sample…</span>{/if}
@@ -658,6 +762,14 @@
     color: inherit;
     font: inherit;
   }
+  select {
+    padding: 0.3rem;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    background: #0f172a;
+    color: inherit;
+    font: inherit;
+  }
   input[type='number'] {
     width: 5rem;
     padding: 0.3rem;
@@ -692,6 +804,14 @@
   }
   .copies {
     width: 4rem;
+  }
+  .sides {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .sides input {
+    width: 4.2rem;
   }
   .samples li {
     display: flex;
@@ -786,6 +906,7 @@
   .qualities,
   .downloads {
     display: flex;
+    align-items: center;
     gap: 0.3rem;
   }
   .qualities button.current {
