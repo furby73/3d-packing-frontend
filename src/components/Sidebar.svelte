@@ -4,6 +4,7 @@
   import { projectIndex, session, signOut } from '../lib/session.svelte.js';
   import Avatar from './Avatar.svelte';
   import Icon from './Icon.svelte';
+  import Logo from './Logo.svelte';
   import ProjectIcon from './ProjectIcon.svelte';
 
   let { onnavigate = () => {} } = $props();
@@ -16,7 +17,7 @@
 </script>
 
 <nav class="pk-sidebar sidebar" aria-label="Main">
-  <a href="/" class="brand" onclick={onnavigate}>3D Packing</a>
+  <a href="/" class="brand" onclick={onnavigate}><Logo size={22} />3D Packing</a>
   <a href="/" class="pk-nav-row" class:is-active={active === 'projects'} onclick={onnavigate}>
     <Icon name="folder" />Projects
     {#if projectIndex.total != null}<span class="pk-nav-row__count">{projectIndex.total}</span>{/if}
@@ -54,6 +55,9 @@
     overflow-y: auto;
   }
   .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
     font: 600 17px/1 var(--font-sans);
     letter-spacing: -0.2px;
     padding: 10px 10px 16px;

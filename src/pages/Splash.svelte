@@ -1,11 +1,12 @@
 <script>
+  import Logo from '../components/Logo.svelte';
   import { retrySession, signOut } from '../lib/session.svelte.js';
 
   let { error = '' } = $props();
 </script>
 
 <div class="splash">
-  <div class="brand">3D Packing</div>
+  <div class="brand"><Logo size={56} motion={error ? 'none' : 'press'} label="3D Packing" /><span>3D Packing</span></div>
   {#if error}
     <div class="pk-empty card" role="alert">
       <h1 class="pk-empty__title">Can't reach the service</h1>
@@ -16,7 +17,7 @@
       </div>
     </div>
   {:else}
-    <div class="pk-row loading" role="status"><span class="pk-spinner"></span>Connecting…</div>
+    <div class="loading" role="status">Connecting…</div>
   {/if}
 </div>
 
@@ -31,6 +32,10 @@
     padding: 24px;
   }
   .brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
     font: 600 17px/1 var(--font-sans);
     letter-spacing: -0.2px;
   }

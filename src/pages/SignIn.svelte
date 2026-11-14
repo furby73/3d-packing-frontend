@@ -1,7 +1,12 @@
 <script>
   import Icon from '../components/Icon.svelte';
+  import IsoArt from '../components/IsoArt.svelte';
+  import Logo from '../components/Logo.svelte';
   import { authMessage, resetPassword, signInWithEmail, signInWithGoogle, signUpWithEmail } from '../lib/firebase.js';
   import { session } from '../lib/session.svelte.js';
+
+  const cell = 31;
+  const lattice = `M0 0L${(cell * Math.sqrt(3)).toFixed(3)} ${cell}M0 ${cell}L${(cell * Math.sqrt(3)).toFixed(3)} 0M0 0V${cell}M${((cell * Math.sqrt(3)) / 2).toFixed(3)} 0V${cell}M${(cell * Math.sqrt(3)).toFixed(3)} 0V${cell}`;
 
   let mode = $state('choose');
   let creating = $state(false);
@@ -10,6 +15,11 @@
   let busy = $state('');
   let error = $state('');
   let info = $state('');
+  let sheetWidth = $state(0);
+  let sheetHeight = $state(0);
+
+  const half = $derived(sheetWidth < 720 ? 250 : 330);
+  const scale = $derived(Math.max(sheetWidth, sheetHeight, 1) / (half * 2));
 
   async function run(kind, action) {
     busy = kind;
@@ -24,8 +34,6 @@
       busy = '';
     }
   }
-
-  const google = () => run('google', signInWithGoogle);
 
   function submit(event) {
     event.preventDefault();
@@ -42,61 +50,75 @@
       info = `If ${email.trim()} has a password here, a reset link is on its way.`;
     });
   }
+
+  function back() {
+    mode = 'choose';
+    error = '';
+    info = '';
+  }
+
+  const steps = [
+    {
+      scene: 'upload',
+      title: 'Upload your models',
+      body: 'OBJ, STL, STEP, 3MF, PLY and glTF, up to 100 MB each, or start from a ready-made sample. OBJ files go into packing jobs.'
+    },
+    {
+      scene: 'container',
+      title: 'Set the container',
+      body: 'Give its width, length and height in your models’ units, and how many copies of each model you need.'
+    },
+    {
+      scene: 'packed',
+      title: 'Get the fewest containers',
+      body: 'Every part is placed. A new container opens only when the last one is full, and each one downloads on its own.'
+    }
+  ];
 </script>
 
 <div class="page">
-  <section class="pk-night hero">
-    <svg class="pk-night__stars" viewBox="0 0 1440 560" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">
-      <circle cx="980" cy="90" r="4" fill="var(--sticker-sky)" />
-      <circle cx="1080" cy="170" r="2" fill="#ffffff99" />
-      <circle cx="1190" cy="70" r="5" fill="var(--sticker-pink)" />
-      <circle cx="1300" cy="210" r="2" fill="#ffffff80" />
-      <circle cx="1120" cy="300" r="3" fill="#ffffffb3" />
-      <circle cx="1360" cy="120" r="3" fill="var(--sticker-purple)" />
-      <circle cx="900" cy="250" r="2" fill="#ffffff66" />
-      <circle cx="1250" cy="400" r="2" fill="#ffffff80" />
-      <circle cx="1020" cy="440" r="3" fill="#ffffff66" />
-      <rect x="1040" y="230" width="72" height="56" rx="12" fill="var(--sticker-sky)" />
-      <rect x="1120" y="250" width="44" height="36" rx="8" fill="var(--sticker-orange)" />
-      <rect x="1172" y="222" width="40" height="64" rx="8" fill="var(--sticker-purple)" />
-      <rect x="1120" y="214" width="36" height="28" rx="5" fill="var(--sticker-teal)" />
-      <rect x="1028" y="294" width="196" height="8" rx="4" fill="#ffffff33" />
-    </svg>
-    <div class="inner">
-      <div class="brand">3D Packing</div>
-      <h1 class="pk-night__title">Pack it tight.</h1>
-      <p class="pk-night__body">
-        Upload your 3D models, run packing jobs on them and share the results with your team — all in one shared project.
+  <section class="hero">
+    <div class="sheet" bind:clientWidth={sheetWidth} bind:clientHeight={sheetHeight}>
+      <svg class="sheet__svg" viewBox="{-half} {-half} {half * 2} {half * 2}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <pattern id="iso-lattice" width={cell * Math.sqrt(3)} height={cell} patternUnits="userSpaceOnUse">
+            <path d={lattice} class="lattice" style:stroke-width={1 / scale} />
+          </pattern>
+        </defs>
+        <rect x={-half * 3} y={-half * 3} width={half * 6} height={half * 6} fill="url(#iso-lattice)" />
+        <Logo size={400} crop={false} motion="draw" x="-200" y="-200" class="sheet__mark" />
+      </svg>
+    </div>
+
+    <div class="brand"><Logo size={28} />3D Packing</div>
+    <div class="intro">
+      <h1 class="headline">Pack it tight.</h1>
+      <p class="lead">
+        Upload your 3D models, choose the container size and how many copies you need. The engine packs every part into as few containers as it
+        can.
       </p>
 
       {#if mode === 'choose'}
-        <div class="pk-row actions">
-          <button type="button" class="pk-btn pk-btn--cta" disabled={!!busy} onclick={google}>
-            {#if busy === 'google'}<span class="pk-spinner"></span>{:else}<svg class="g" viewBox="0 0 24 24" aria-hidden="true"
-                ><path fill="#fff" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3Z" /><path
-                  fill="#fff"
-                  opacity=".85"
-                  d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22Z"
-                /><path fill="#fff" opacity=".7" d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1a10 10 0 0 0 0 9.2L6.4 14Z" /><path
-                  fill="#fff"
-                  opacity=".55"
-                  d="M12 6c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.4L6.4 10C7.2 7.7 9.4 6 12 6Z"
+        <div class="actions">
+          <button type="button" class="pk-btn pk-btn--cta" disabled={!!busy} onclick={() => run('google', signInWithGoogle)}>
+            {#if busy === 'google'}<span class="pk-spinner on-primary"></span>{:else}<svg class="g" viewBox="0 0 24 24" aria-hidden="true"
+                ><path
+                  fill="currentColor"
+                  d="M21.35 11.1H12v2.98h5.35c-.23 1.4-1.62 4.1-5.35 4.1-3.22 0-5.85-2.67-5.85-5.95S8.78 6.28 12 6.28c1.83 0 3.06.78 3.76 1.45l2.57-2.47C16.68 3.72 14.55 2.8 12 2.8 6.92 2.8 2.8 6.92 2.8 12s4.12 9.2 9.2 9.2c5.31 0 8.83-3.73 8.83-8.99 0-.6-.07-1.06-.15-1.51Z"
                 /></svg
               >{/if}
             Continue with Google
           </button>
-          <button type="button" class="pk-btn pk-btn--cta-secondary" disabled={!!busy} onclick={() => (mode = 'email')}>
+          <button type="button" class="pk-btn outline" disabled={!!busy} onclick={() => (mode = 'email')}>
             <Icon name="mail" />Continue with email
           </button>
         </div>
         <p class="note">New here? Signing in creates your account.</p>
       {:else}
-        <form class="pk-card pk-card--raised email" onsubmit={submit}>
-          <div class="email-head">
-            <h2 class="pk-card__title">{creating ? 'Create an account' : 'Sign in with email'}</h2>
-            <button type="button" class="pk-btn pk-btn--ghost back" onclick={() => ((mode = 'choose'), (error = ''), (info = ''))}>
-              Other options
-            </button>
+        <form class="email" onsubmit={submit}>
+          <div class="email__head">
+            <h2>{creating ? 'Create an account' : 'Sign in with email'}</h2>
+            <button type="button" class="pk-btn pk-btn--ghost back" onclick={back}>Other options</button>
           </div>
           <div class="pk-field">
             <label class="pk-label" for="email">Email</label>
@@ -115,15 +137,15 @@
             />
             {#if creating}<span class="pk-hint">At least 6 characters.</span>{/if}
           </div>
-          <div class="pk-row submit-row">
+          <div class="email__actions">
             <button type="submit" class="pk-btn pk-btn--solid" disabled={!!busy}>
-              {#if busy === 'email'}<span class="pk-spinner"></span>{/if}{creating ? 'Create account' : 'Sign in'}
+              {#if busy === 'email'}<span class="pk-spinner on-primary"></span>{/if}{creating ? 'Create account' : 'Sign in'}
             </button>
             {#if !creating}
               <button type="button" class="pk-btn pk-btn--ghost" disabled={!!busy} onclick={forgot}>Forgot password?</button>
             {/if}
             <span class="spacer"></span>
-            <button type="button" class="pk-link switch" onclick={() => ((creating = !creating), (error = ''), (info = ''))}>
+            <button type="button" class="switch" onclick={() => ((creating = !creating), (error = ''), (info = ''))}>
               {creating ? 'I already have an account' : 'Create an account'}
             </button>
           </div>
@@ -142,22 +164,20 @@
     </div>
   </section>
 
-  <section class="features">
-    <div class="pk-card feature">
-      <span class="pk-project-icon pk-sticker-sky" aria-hidden="true"><Icon name="upload" /></span>
-      <h2>Upload models</h2>
-      <p>STL, OBJ, STEP, 3MF, PLY, glTF and GLB, up to 100 MB each.</p>
-    </div>
-    <div class="pk-card feature">
-      <span class="pk-project-icon pk-sticker-orange" aria-hidden="true"><Icon name="play" /></span>
-      <h2>Run packing jobs</h2>
-      <p>Pick the models, copies and container size; get an email when the result is ready.</p>
-    </div>
-    <div class="pk-card feature">
-      <span class="pk-project-icon pk-sticker-purple" aria-hidden="true"><Icon name="users" /></span>
-      <h2>Work together</h2>
-      <p>Invite people to a project as viewers, editors or owners.</p>
-    </div>
+  <section class="steps" aria-labelledby="steps-title">
+    <h2 id="steps-title" class="sr-only">How packing works</h2>
+    <ol>
+      {#each steps as step, index (step.scene)}
+        <li>
+          <IsoArt scene={step.scene} />
+          <div class="step__text">
+            <h3><span class="step__number">{index + 1}</span>{step.title}</h3>
+            <p>{step.body}</p>
+          </div>
+        </li>
+      {/each}
+    </ol>
+    <p class="team">Projects are shared: invite people as viewers, editors or owners, and everyone sees the same files and results.</p>
   </section>
 </div>
 
@@ -166,55 +186,128 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    background: var(--canvas);
+    color: var(--ink);
   }
   .hero {
-    padding: 0;
-  }
-  .inner {
     position: relative;
-    max-width: 1120px;
+    min-height: min(780px, 100vh);
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .sheet {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 60%;
+    pointer-events: none;
+    -webkit-mask-image: radial-gradient(farthest-side at 50% 50%, #000 30%, transparent 100%);
+    mask-image: radial-gradient(farthest-side at 50% 50%, #000 30%, transparent 100%);
+  }
+  .sheet__svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .lattice {
+    fill: none;
+    stroke: var(--control-line);
+  }
+  .sheet :global(.sheet__mark) {
+    color: var(--ink);
+  }
+  .intro {
+    position: relative;
+    width: 100%;
+    max-width: 1440px;
     margin: 0 auto;
-    padding: 32px 48px 96px;
+    padding: 40px clamp(24px, 6vw, 96px) 72px;
   }
   .brand {
+    position: absolute;
+    z-index: 1;
+    top: 32px;
+    left: max(clamp(24px, 6vw, 96px), calc((100% - 1440px) / 2 + clamp(24px, 6vw, 96px)));
+    display: flex;
+    align-items: center;
+    gap: 10px;
     font: 600 17px/1 var(--font-sans);
     letter-spacing: -0.2px;
-    color: #ffffff;
-    margin-bottom: 120px;
+  }
+  .headline {
+    margin-top: 96px;
+    max-width: 9ch;
+    font: 700 clamp(56px, 7.4vw, 104px) / 0.94 var(--font-sans);
+    letter-spacing: -0.045em;
+  }
+  .lead {
+    max-width: 30rem;
+    margin: 28px 0 32px;
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--ink-muted);
   }
   .actions {
+    display: flex;
+    flex-wrap: wrap;
     gap: 12px;
   }
   .g {
     width: 18px;
     height: 18px;
   }
+  .outline {
+    height: var(--size-control-lg);
+    padding: 0 20px;
+    border-radius: var(--radius-full);
+    border-color: var(--ink);
+    background: transparent;
+    color: var(--ink);
+    font-size: 16px;
+  }
+  .outline:hover {
+    background: var(--surface-hover);
+  }
+  .on-primary {
+    border-color: rgb(255 255 255 / 0.35);
+    border-top-color: #fff;
+  }
   .note {
-    margin-top: 14px;
+    margin-top: 16px;
     font-size: 14px;
-    color: #ffffffcc;
+    color: var(--ink-muted);
   }
   .email {
     max-width: 440px;
     display: flex;
     flex-direction: column;
     gap: 16px;
-    color: var(--ink);
+    padding: 24px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
   }
-  .email-head {
+  .email__head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
   }
-  .email-head .pk-card__title {
-    margin: 0;
+  .email__head h2 {
+    font: 600 20px/1.4 var(--font-sans);
+    letter-spacing: -0.125px;
   }
   .back {
     margin-right: -10px;
     font-size: 14px;
   }
-  .submit-row {
+  .email__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
   }
   .spacer {
@@ -223,46 +316,97 @@
   .switch {
     border: 0;
     background: none;
-    cursor: pointer;
-    font-size: 14px;
     padding: 0;
+    color: var(--link);
+    font: 500 14px/1 var(--font-sans);
+    cursor: pointer;
+  }
+  .switch:hover {
+    text-decoration: underline;
   }
   .message {
     max-width: 440px;
     margin-top: 16px;
   }
-  .features {
-    max-width: 1120px;
+  .steps {
     width: 100%;
+    max-width: 1440px;
     margin: 0 auto;
-    padding: 56px 48px 64px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 24px;
+    padding: 56px clamp(24px, 6vw, 96px) 64px;
   }
-  .feature {
+  .steps ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 40px;
+  }
+  .steps li {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 20px;
+    color: var(--ink);
   }
-  .feature h2 {
-    font: 600 20px/1.4 var(--font-sans);
+  .step__text {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .steps h3 {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font: 600 20px/1.3 var(--font-sans);
     letter-spacing: -0.125px;
   }
-  .feature p {
+  .step__number {
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-faint);
+  }
+  .steps p {
+    max-width: 34ch;
     font-size: 16px;
     line-height: 1.5;
     color: var(--ink-muted);
   }
-  @media (max-width: 840px) {
-    .inner {
-      padding: 24px 20px 64px;
+  .steps .team {
+    max-width: none;
+    margin-top: 48px;
+    font-size: 15px;
+    color: var(--ink-muted);
+  }
+  @media (max-width: 900px) {
+    .hero {
+      flex-direction: column;
+      align-items: stretch;
+      min-height: 0;
+    }
+    .sheet {
+      position: relative;
+      order: -1;
+      width: 100%;
+      height: 300px;
+      -webkit-mask-image: radial-gradient(farthest-side at 50% 50%, #000 45%, transparent 100%);
+      mask-image: radial-gradient(farthest-side at 50% 50%, #000 45%, transparent 100%);
     }
     .brand {
-      margin-bottom: 64px;
+      top: 24px;
     }
-    .features {
-      padding: 32px 20px 48px;
+    .intro {
+      position: static;
+      padding-top: 8px;
+    }
+    .headline {
+      margin-top: 0;
+    }
+    .steps ol {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+    .steps li {
+      flex-direction: row;
+      align-items: flex-start;
     }
   }
 </style>

@@ -1,5 +1,6 @@
 <script>
   import Icon from '../components/Icon.svelte';
+  import Logo from '../components/Logo.svelte';
   import { session, signOut } from '../lib/session.svelte.js';
 </script>
 
@@ -12,7 +13,7 @@
     <circle cx="1100" cy="760" r="3" fill="#ffffff66" />
     <circle cx="300" cy="420" r="2" fill="#ffffff80" />
   </svg>
-  <div class="brand">3D Packing</div>
+  <div class="brand"><Logo size={28} />3D Packing</div>
   <div class="center">
     <div class="body">
       <span class="lock"><Icon name="lock" size={28} /></span>
@@ -36,6 +37,9 @@
   }
   .brand {
     position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
     padding: 32px 48px;
     font: 600 17px/1 var(--font-sans);
     letter-spacing: -0.2px;
