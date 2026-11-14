@@ -36,10 +36,8 @@ code {
   letter-spacing: 0.125px;
   color: var(--ink-muted);
 }
-@media (min-width: 1530px) {
-  .pk-content {
-    max-width: 1280px;
-  }
+.pk-content {
+  max-width: 1680px;
 }
 .pk-content.stack {
   display: flex;
