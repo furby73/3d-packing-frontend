@@ -49,4 +49,4 @@ docker build -t packing-frontend:local .
 
 In the cluster the Gateway routes `/api/*` to the backend and `/` here, so the browser calls the API same-origin. nginx falls back to `index.html`, so every route above can be opened directly.
 
-Pushing to `demo` builds `ghcr.io/furby73/3d-packing-frontend:demo-<short sha>` (`.github/workflows/image.yml`); the deploy repo pins that tag.
+Pushing to `main` builds `ghcr.io/furby73/3d-packing-frontend:main-<short sha>` (`.github/workflows/image.yml`); the deploy repo pins that tag.
