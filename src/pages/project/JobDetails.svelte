@@ -99,7 +99,7 @@
     const ids = new Set((target.input?.items ?? []).map((item) => item.fileId));
     if (!ids.size) return;
     try {
-      const result = await api.files(ctx.id, { size: 100, format: ['OBJ'] });
+      const result = await api.files(ctx.id, { size: 100 });
       fileSizes = Object.fromEntries(result.content.filter((file) => ids.has(file.id)).map((file) => [file.id, file.sizeBytes]));
     } catch {
       fileSizes = {};

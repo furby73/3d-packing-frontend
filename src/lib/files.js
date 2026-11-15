@@ -11,11 +11,14 @@ const extensions = {
   glb: 'GLB'
 };
 
-export const acceptAttribute = Object.keys(extensions)
-  .map((ext) => `.${ext}`)
+export const uploadableFormats = ['STL', 'OBJ', 'THREE_MF', 'PLY', 'GLTF', 'GLB'];
+
+export const acceptAttribute = Object.entries(extensions)
+  .filter(([, format]) => uploadableFormats.includes(format))
+  .map(([ext]) => `.${ext}`)
   .join(',');
 
-export const formatsLine = 'STL, OBJ, STEP/STP, 3MF, PLY, glTF, GLB · up to 100 MB each';
+export const formatsLine = 'STL, OBJ, 3MF, PLY, glTF, GLB · up to 100 MB each';
 
 export function extensionOf(name) {
   const match = /\.([^.]+)$/.exec(name ?? '');
@@ -25,12 +28,24 @@ export function extensionOf(name) {
 export const formatOfName = (name) => extensions[extensionOf(name)] ?? null;
 
 export function uploadProblem(file) {
-  if (!formatOfName(file.name)) return 'Unsupported format — use STL, OBJ, STEP, 3MF, PLY, glTF or GLB';
+  const format = formatOfName(file.name);
+  if (format === 'STEP') return 'STEP isn’t supported — export the model as STL or 3MF';
+  if (!format) return 'Unsupported format — use STL, OBJ, 3MF, PLY, glTF or GLB';
   if (file.size === 0) return 'The file is empty';
   if (file.size > maxUploadBytes) return 'Larger than 100 MB';
   if (file.name.length > 255) return 'The filename is longer than 255 characters';
   return '';
 }
+
+export function packingOf(file, accepted) {
+  const target = file.packingFormat === undefined ? file.format : file.packingFormat;
+  if (target && accepted.includes(target)) return 'packable';
+  if (!uploadableFormats.includes(file.format)) return 'unsupported';
+  if (!target) return 'reupload';
+  return 'unaccepted';
+}
+
+export const isPackable = (file, accepted) => packingOf(file, accepted) === 'packable';
 
 export function renameProblem(name, format) {
   const trimmed = name.trim();

@@ -8,7 +8,7 @@
   import SortHeader from '../../components/SortHeader.svelte';
   import SortControl from '../../components/SortControl.svelte';
   import { api } from '../../lib/api.js';
-  import { acceptAttribute, formatsLine, renameProblem, save, uploadProblem } from '../../lib/files.js';
+  import { acceptAttribute, formatOfName, formatsLine, packingOf, renameProblem, save, uploadProblem } from '../../lib/files.js';
   import { dayAfter, formatLabel, shortHash, size as bytes, startOfDay, when } from '../../lib/format.js';
   import { queryParam, route, setQuery } from '../../lib/router.svelte.js';
   import { copy, failed, toast } from '../../lib/toast.svelte.js';
@@ -49,7 +49,7 @@
   let input = $state();
 
   const previewId = $derived((route.search, queryParam('file')));
-  const packable = (file) => ctx.acceptedFormats.includes(file.format);
+  const packing = (file) => packingOf(file, ctx.acceptedFormats);
   const filtered = $derived(debounced.length >= 3 || format.length > 0 || !!(uploaded.from || uploaded.to));
 
   let timer;
@@ -124,6 +124,7 @@
         progress: 0,
         status: problem ? 'error' : 'queued',
         error: problem,
+        converted: false,
         controller: null
       };
     });
@@ -141,10 +142,11 @@
       next.status = 'uploading';
       next.controller = new AbortController();
       try {
-        await api.upload(ctx.id, next.file, {
+        const stored = await api.upload(ctx.id, next.file, {
           signal: next.controller.signal,
           onProgress: (value) => (next.progress = value)
         });
+        next.converted = !!stored && stored.format !== 'OBJ' && !!stored.packingFormat;
         next.status = 'done';
         next.progress = 1;
         reload();
@@ -273,7 +275,7 @@
       <span><button type="button" class="pk-link linkish" onclick={() => input.click()}>Choose files</button> or drag them here — they upload one at a time</span>
     </span>
     <span class="pk-dropzone__formats">
-      {formatsLine} · only {ctx.acceptedFormats.map(formatLabel).join(', ')} can be packed ·
+      {formatsLine} · non-OBJ models are converted to OBJ in millimetres for packing ·
       <button type="button" class="pk-link linkish" onclick={() => (samplesOpen = true)}>add a sample model</button>
     </span>
     <input bind:this={input} type="file" accept={acceptAttribute} multiple hidden onchange={pick} />
@@ -304,9 +306,9 @@
           <span class="ellipsis">{entry.name}</span>
           <span class="upload-meta">
             {bytes(entry.size)} ·
-            {#if entry.status === 'uploading'}{Math.round(entry.progress * 100)}%
+            {#if entry.status === 'uploading'}{entry.progress >= 1 && formatOfName(entry.name) !== 'OBJ' ? 'Converting to OBJ…' : `${Math.round(entry.progress * 100)}%`}
             {:else if entry.status === 'queued'}Waiting
-            {:else if entry.status === 'done'}Uploaded
+            {:else if entry.status === 'done'}{entry.converted ? 'Uploaded · converted to OBJ' : 'Uploaded'}
             {:else if entry.status === 'cancelled'}Cancelled
             {:else}<span class="bad-text">{entry.error}</span>{/if}
           </span>
@@ -390,7 +392,9 @@
                 <tr class:is-selected={previewId === file.id}>
                   <td class="pk-cell-main">
                     <button type="button" class="file-link" onclick={() => setQuery({ file: file.id })}>{file.filename}</button>
-                    {#if packable(file)}<span class="pk-packable packable"><Icon name="check" size={12} strokeWidth="2.5" />Packable</span>{/if}
+                    {#if packing(file) === 'packable'}<span class="pk-packable packable"><Icon name="check" size={12} strokeWidth="2.5" />Packable</span>
+                    {:else if packing(file) === 'reupload'}<span class="pk-not-packable packable" title="Uploaded before models were converted to OBJ">Upload again to pack</span>
+                    {:else}<span class="pk-not-packable packable">Can’t be packed</span>{/if}
                   </td>
                   <td><span class="pk-chip">{formatLabel(file.format)}</span></td>
                   <td class="pk-num">{bytes(file.sizeBytes)}</td>

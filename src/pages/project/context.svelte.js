@@ -1,5 +1,6 @@
 import { getContext, setContext } from 'svelte';
 import { api } from '../../lib/api.js';
+import { isPackable } from '../../lib/files.js';
 import { allows } from '../../lib/format.js';
 import { limitsOf } from '../../lib/schema.js';
 
@@ -59,7 +60,7 @@ export function createProjectContext(projectId) {
       .catch(() => ctx.acceptedFormats)
       .then((formats) => {
         ctx.acceptedFormats = formats;
-        return api.files(projectId, { size: 1, format: formats });
+        return countPackable(formats);
       });
     const roster = api.members(projectId, { size: 100 });
     const ownerCount = roster.then((page) =>
@@ -77,7 +78,7 @@ export function createProjectContext(projectId) {
     const total = (entry) => (entry.status === 'fulfilled' ? entry.value.totalElements : null);
     ctx.counts = {
       files: total(files),
-      packable: total(packable),
+      packable: packable.status === 'fulfilled' ? packable.value : null,
       jobs: total(jobs),
       members: total(members),
       owners: owners.status === 'fulfilled' ? owners.value : null
@@ -85,6 +86,16 @@ export function createProjectContext(projectId) {
     if (members.status === 'fulfilled' && ctx.project) {
       ctx.creator = members.value.content.find((member) => member.userId === ctx.project.createdBy) ?? null;
     }
+  }
+
+  async function countPackable(formats) {
+    let count = 0;
+    for (let page = 0; page < 20; page++) {
+      const result = await api.files(projectId, { page, size: 100 });
+      count += result.content.filter((file) => isPackable(file, formats)).length;
+      if (page >= result.totalPages - 1) return count;
+    }
+    return null;
   }
 
   async function refresh() {

@@ -3,7 +3,7 @@
   import Icon from '../../components/Icon.svelte';
   import Viewer from '../../components/LazyViewer.svelte';
   import { api } from '../../lib/api.js';
-  import { previewable, save, viewerKind } from '../../lib/files.js';
+  import { packingOf, previewable, save, viewerKind } from '../../lib/files.js';
   import { dims, formatLabel, midHash, size as bytes, when } from '../../lib/format.js';
   import { copy, failed } from '../../lib/toast.svelte.js';
   import { useProject } from './context.svelte.js';
@@ -22,8 +22,16 @@
   let downloading = $state(false);
 
   const canPreview = $derived(file && previewable.has(file.format));
-  const packable = $derived(file && ctx.acceptedFormats.includes(file.format));
+  const packing = $derived(file ? packingOf(file, ctx.acceptedFormats) : null);
+  const packable = $derived(packing === 'packable');
   const zUp = $derived(file && (file.format === 'STL' || file.format === 'THREE_MF'));
+
+  const packingNote = $derived.by(() => {
+    if (packing === 'packable') return file.format === 'OBJ' ? 'can be used in packing jobs' : 'converted to OBJ in millimetres for packing jobs';
+    if (packing === 'reupload') return 'uploaded before models were converted to OBJ; upload it again to pack it';
+    if (packing === 'unsupported') return 'cannot be packed; export it as STL or 3MF and upload that';
+    return 'cannot be packed yet';
+  });
 
   onMount(() => find(fileId));
 
@@ -131,7 +139,7 @@
 
       <dl class="pk-dl details">
         <dt>Format</dt>
-        <dd>{formatLabel(file.format)}{packable ? ' — can be used in packing jobs' : ' — cannot be packed yet'}</dd>
+        <dd>{formatLabel(file.format)} — {packingNote}</dd>
         <dt>Size</dt>
         <dd>{bytes(file.sizeBytes)}</dd>
         <dt>SHA-256</dt>

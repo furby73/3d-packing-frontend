@@ -61,7 +61,7 @@
     {
       scene: 'upload',
       title: 'Upload your models',
-      body: 'OBJ, STL, STEP, 3MF, PLY and glTF, up to 100 MB each, or start from a ready-made sample. OBJ files go into packing jobs.'
+      body: 'OBJ, STL, 3MF, PLY and glTF, up to 100 MB each, or start from a ready-made sample. Everything but OBJ is converted to OBJ in millimetres for packing.'
     },
     {
       scene: 'container',

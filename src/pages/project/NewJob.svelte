@@ -3,6 +3,7 @@
   import Icon from '../../components/Icon.svelte';
   import Stepper from '../../components/Stepper.svelte';
   import { api } from '../../lib/api.js';
+  import { packingOf } from '../../lib/files.js';
   import { duration, formatLabel, jobLabel, limit as limitLabel, modelColor, plural, size as bytes } from '../../lib/format.js';
   import { navigate, queryParam } from '../../lib/router.svelte.js';
   import {
@@ -27,7 +28,7 @@
   let limits = $state(null);
   let fields = $state([]);
   let files = $state([]);
-  let hiddenFiles = $state({ total: 0, names: [] });
+  let hiddenFiles = $state({ reupload: [], unsupported: [] });
   let draft = $state(null);
   let renamed = $state([]);
   let picks = $state({});
@@ -83,7 +84,7 @@
       const schema = await loadSchema();
       limits = limitsOf(schema);
       fields = fieldsOf(schema);
-      const [loadedDraft, loadedFiles, others] = await Promise.all([
+      const [loadedDraft, loadedFiles] = await Promise.all([
         api.draft(ctx.id, from || undefined).catch((error) => {
           if (from && (error.status === 404 || error.status === 422 || error.status === 409)) {
             toast.warning(error.status === 404 ? 'That job no longer exists — starting from your last job' : error.message);
@@ -91,11 +92,14 @@
           }
           throw error;
         }),
-        allPackable(limits.acceptedFormats),
-        otherFiles(['STL', 'OBJ', 'STEP', 'THREE_MF', 'PLY', 'GLTF', 'GLB'].filter((format) => !limits.acceptedFormats.includes(format)))
+        allFiles()
       ]);
-      files = loadedFiles;
-      hiddenFiles = { total: others.totalElements, names: others.content.map((file) => file.filename) };
+      const state = (file) => packingOf(file, limits.acceptedFormats);
+      files = loadedFiles.filter((file) => state(file) === 'packable');
+      hiddenFiles = {
+        reupload: loadedFiles.filter((file) => state(file) === 'reupload').map((file) => file.filename),
+        unsupported: loadedFiles.filter((file) => !['packable', 'reupload'].includes(state(file))).map((file) => file.filename)
+      };
       applyDraft(loadedDraft);
       phase = 'ready';
     } catch (error) {
@@ -104,15 +108,10 @@
     }
   }
 
-  function otherFiles(formats) {
-    if (formats.length === 0) return Promise.resolve({ totalElements: 0, content: [] });
-    return api.files(ctx.id, { size: 5, format: formats });
-  }
-
-  async function allPackable(formats) {
+  async function allFiles() {
     const out = [];
     for (let page = 0; page < 10; page++) {
-      const result = await api.files(ctx.id, { page, size: 100, format: formats, sort: 'filename', direction: 'ASC' });
+      const result = await api.files(ctx.id, { page, size: 100, sort: 'filename', direction: 'ASC' });
       out.push(...result.content);
       if (page >= result.totalPages - 1) break;
     }
@@ -311,7 +310,7 @@
           <div>
             <h2 id="models-h" class="pk-card__title">Models</h2>
             <p class="pk-muted small">
-              {limits.acceptedFormats.map(formatLabel).join(', ')} files only · {limits.minItems}–{limits.maxItems} models · {limits.minCopies}–{limits.maxCopies}
+              {limits.minItems}–{limits.maxItems} models · {limits.minCopies}–{limits.maxCopies}
               copies each, {limits.maxTotalCopies} in total
             </p>
           </div>
@@ -327,7 +326,7 @@
             <div class="pk-search">
               <Icon name="search" />
               <label for="model-search" class="sr-only">Search models</label>
-              <input id="model-search" class="pk-input" type="search" placeholder="Search {limits.acceptedFormats.map(formatLabel).join(', ')} files by name" bind:value={search} />
+              <input id="model-search" class="pk-input" type="search" placeholder="Search models by name" bind:value={search} />
             </div>
           </div>
           <div style="overflow-x: auto">
@@ -344,6 +343,7 @@
               <tbody>
                 {#each visible as file (file.id)}
                   {@const index = selected.findIndex((entry) => entry.id === file.id)}
+                  {@const wasRenamed = renamed.some((entry) => entry.fileId === file.id)}
                   <tr class:is-selected={file.id in picks}>
                     <td><input type="checkbox" aria-label={file.filename} checked={file.id in picks} onchange={() => toggle(file)} /></td>
                     <td class="pk-cell-main">
@@ -358,8 +358,10 @@
                         </span>
                         <span class="model__text">
                           {file.filename}
-                          {#if renamed.some((entry) => entry.fileId === file.id)}
-                            <span class="model__meta"><span class="renamed">renamed since {jobLabel(draft.sourceJobId)}</span></span>
+                          {#if file.format !== 'OBJ' || wasRenamed}
+                            <span class="model__meta">
+                              {#if file.format !== 'OBJ'}{formatLabel(file.format)} · converted to OBJ{/if}{#if file.format !== 'OBJ' && wasRenamed}&nbsp;·&nbsp;{/if}{#if wasRenamed}<span class="renamed">renamed since {jobLabel(draft.sourceJobId)}</span>{/if}
+                            </span>
                           {/if}
                         </span>
                       </label>
@@ -385,20 +387,24 @@
         {:else}
           <div class="no-models">
             <p>
-              This project has no {limits.acceptedFormats.map(formatLabel).join(', ')} files yet.
+              This project has no packable models yet.
               <a href="/projects/{ctx.id}/files">Upload models or add a sample</a> first.
             </p>
           </div>
         {/if}
-        {#if hiddenFiles.total > 0}
-          <div class="footnote">
-            <Icon name="info" />
-            <span>
-              {hiddenFiles.total === 1 ? '1 file in this project isn’t listed' : `${hiddenFiles.total} files in this project aren’t listed`}:
-              <b>{hiddenFiles.names.join(', ')}{hiddenFiles.total > hiddenFiles.names.length ? '…' : ''}</b>. Only
-              {limits.acceptedFormats.map(formatLabel).join(', ')} files can be packed today.
-            </span>
-          </div>
+        {#if hiddenFiles.reupload.length > 0}
+          {@render footnote(
+            hiddenFiles.reupload,
+            'it was uploaded before models were converted to OBJ. Upload it again to pack it.',
+            'they were uploaded before models were converted to OBJ. Upload them again to pack them.'
+          )}
+        {/if}
+        {#if hiddenFiles.unsupported.length > 0}
+          {@render footnote(
+            hiddenFiles.unsupported,
+            'it can’t be packed. Export STEP models as STL or 3MF and upload those.',
+            'they can’t be packed. Export STEP models as STL or 3MF and upload those.'
+          )}
         {/if}
       </section>
 
@@ -470,6 +476,16 @@
     </aside>
   </div>
 {/if}
+
+{#snippet footnote(names, one, many)}
+  <div class="footnote">
+    <Icon name="info" />
+    <span>
+      {names.length === 1 ? '1 file isn’t listed' : `${names.length} files aren’t listed`}:
+      <b>{names.slice(0, 5).join(', ')}{names.length > 5 ? '…' : ''}</b> — {names.length === 1 ? one : many}
+    </span>
+  </div>
+{/snippet}
 
 {#snippet fieldInput(field)}
   {#if field.kind === 'group'}
