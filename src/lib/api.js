@@ -183,5 +183,6 @@ export const api = {
   resultBlob: (projectId, jobId) => blob(`${job(projectId, jobId)}/result`),
   resultBuffer: (projectId, jobId) => buffer(`${job(projectId, jobId)}/result`),
   binBlob: (projectId, jobId, number) => blob(`${job(projectId, jobId)}/result/bins/${number}`),
-  previewBuffer: (projectId, jobId, quality) => buffer(`${job(projectId, jobId)}/preview/${quality}`)
+  previewBuffer: (projectId, jobId, quality) => buffer(`${job(projectId, jobId)}/preview/${quality}`),
+  binPreviewBuffer: (projectId, jobId, number, quality) => buffer(`${job(projectId, jobId)}/result/bins/${number}/preview/${quality}`)
 };

@@ -167,11 +167,25 @@
         const data = await api.previewBuffer(ctx.id, jobId, extra);
         save(new Blob([data], { type: 'model/gltf-binary' }), `${stem(resultName)}-preview-${extra.toLowerCase()}.glb`);
       }
+      if (kind === 'binglb') {
+        const model = binPreview(bins.find((bin) => bin.number === extra));
+        const data = await api.binPreviewBuffer(ctx.id, jobId, extra, model.quality);
+        save(
+          new Blob([data], { type: 'model/gltf-binary' }),
+          `${stem(resultName)}-container-${String(extra).padStart(3, '0')}-${model.quality.toLowerCase()}.glb`
+        );
+      }
     } catch (error) {
       failed(error);
     } finally {
       downloading = '';
     }
+  }
+
+  function binPreview(bin) {
+    const list = bin?.previews ?? [];
+    if (!list.length) return null;
+    return list.find((model) => model.quality === shown) ?? list.find((model) => model.quality === defaultQuality(list));
   }
 
   function toggleItem(index) {
@@ -431,6 +445,7 @@
           <div class="bins">
             <span class="pk-eyebrow">One file per container · each in its own coordinates</span>
             {#each bins as bin, index (bin.number)}
+              {@const preview = binPreview(bin)}
               <div class="bin-row" class:is-focus={focus === index}>
                 <span class="pk-swatch bin-swatch"><Icon name="containers" size={12} /></span>
                 <button type="button" class="bin-name" onclick={() => (focus = index)}>Container {bin.number}</button>
@@ -447,6 +462,17 @@
                 <button type="button" class="pk-btn small-btn" disabled={downloading === `bin${bin.number}`} onclick={() => download('bin', bin.number)}>
                   {#if downloading === `bin${bin.number}`}<span class="pk-spinner"></span>{:else}<Icon name="download" />{/if}OBJ
                 </button>
+                {#if preview}
+                  <button
+                    type="button"
+                    class="pk-btn small-btn"
+                    disabled={downloading === `binglb${bin.number}`}
+                    onclick={() => download('binglb', bin.number)}
+                    title="Lighter preview of container {bin.number} · {triangles(preview.triangles)} triangles · {bytes(preview.sizeBytes)}"
+                  >
+                    {#if downloading === `binglb${bin.number}`}<span class="pk-spinner"></span>{:else}<Icon name="download" />{/if}{preview.quality.toLowerCase()} GLB
+                  </button>
+                {/if}
               </div>
             {/each}
           </div>
