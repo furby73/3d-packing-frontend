@@ -1,20 +1,39 @@
 {
-  "name": "3d-packing-frontend",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "firebase": "^13.1.0",
-    "three": "^0.186.1"
-  },
-  "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^7.3.1",
-    "svelte": "^5.57.2",
-    "vite": "^8.3.4"
-  }
+	"name": "compack-frontend",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"imports": {
+		"#lib/*": "./src/lib/*"
+	},
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"lint": "prettier --check .",
+		"format": "prettier --write ."
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-static": "^4.0.0",
+		"@sveltejs/kit": "^3.0.0",
+		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"@types/node": "^26.6.6",
+		"@types/three": "^0.187.0",
+		"prettier": "^3.8.3",
+		"prettier-plugin-svelte": "^4.1.0",
+		"svelte": "^5.57.2",
+		"svelte-check": "^4.6.0",
+		"typescript": "^6.0.3",
+		"vite": "^8.3.0"
+	},
+	"dependencies": {
+		"@firebase/app": "^0.16.2",
+		"@firebase/auth": "^1.13.6",
+		"@fontsource/ibm-plex-mono": "^5.3.0",
+		"@fontsource/ibm-plex-sans": "^5.3.0",
+		"three": "^0.187.0"
+	}
 }
